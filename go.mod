@@ -2,7 +2,10 @@ module github.com/minhvhd/go-monitor
 
 go 1.22.5
 
-require github.com/shirou/gopsutil/v4 v4.24.9
+require (
+	github.com/coder/websocket v1.8.12
+	github.com/shirou/gopsutil/v4 v4.24.9
+)
 
 require (
 	github.com/ebitengine/purego v0.8.0 // indirect
