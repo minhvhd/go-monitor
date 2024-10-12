@@ -3,21 +3,58 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Document</title>
+    <title>Hardware Monitor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              dark: "#1a1a1a",
+              darker: "#141414",
+            },
+          },
+        },
+      };
+    </script>
   </head>
-  <body>
-    <h1>Go Monitor</h1>
-    <section hx-ext="ws" ws-connect="ws://localhost:8082/ws">
-      <section id="system"></section>
-      <section id="cpu"></section>
-      <section id="disk"></section>
-    </section>
+  <body class="bg-dark text-gray-200 p-6">
+    <div class="max-w-6xl mx-auto">
+      <h1 class="text-3xl font-bold mb-4 flex items-center">
+        Hardware Monitor
+        <span
+          class="ml-auto text-sm font-normal text-green-500"
+          id="timestamp"
+        ></span>
+      </h1>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- System Information -->
+        <div class="bg-darker p-4 rounded-lg">
+          <h2 class="text-xl font-semibold mb-3">System</h2>
+          <div class="grid grid-cols-2 gap-2" id="system-info"></div>
+        </div>
+
+        <!-- CPU Information -->
+        <div class="bg-darker p-4 rounded-lg">
+          <h2 class="text-xl font-semibold mb-3">CPU</h2>
+          <div class="grid grid-cols-2 gap-2" id="cpu-info"></div>
+          <div class="mt-4 grid grid-cols-4 gap-2" id="cpu-cores"></div>
+        </div>
+
+        <!-- Disk Information -->
+        <div class="bg-darker p-4 rounded-lg">
+          <h2 class="text-xl font-semibold mb-3">Disk</h2>
+          <div class="grid grid-cols-2 gap-2" id="disk-info"></div>
+        </div>
+      </div>
+    </div>
     <script
       src="https://unpkg.com/htmx.org@1.9.12"
       integrity="sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2XoQrxeTUQyRjrOnlCoYta87iKBWq3EsdM2"
       crossorigin="anonymous"
     ></script>
-    <!-- <script src="https://unpkg.com/htmx.org@1.9.12/dist/ext/ws.js"></script> -->
     <script>
       document.addEventListener("DOMContentLoaded", function (evt) {
         const socket = new WebSocket("ws://localhost:8082/ws");
@@ -26,8 +63,9 @@
           console.log("WebSocket connection established");
         };
 
-        socket.onmessage = function(event) {
-          console.log(event.data, 'data')
+        socket.onmessage = function (event) {
+          const data = JSON.parse(event.data);
+          updateUI(data);
         };
 
         socket.onclose = function (event) {
@@ -44,6 +82,92 @@
           console.error(`WebSocket error: ${error.message}`);
         };
       });
+
+      function convertToCamelCase(data) {
+        if (Array.isArray(data)) {
+          return data.map((item) => convertToCamelCase(item));
+        } else if (typeof data === "object" && data !== null) {
+          const newObj = {};
+          for (const [key, value] of Object.entries(data)) {
+            const camelKey = key
+              .replace(/(?:^\w|[A-Z]|\b\w)/g, (letter, index) => {
+                return index === 0
+                  ? letter.toLowerCase()
+                  : letter.toUpperCase();
+              })
+              .replace(/\s+/g, "");
+            newObj[camelKey] = convertToCamelCase(value);
+          }
+          return newObj;
+        }
+        return data;
+      }
+
+      function updateUI(data) {
+        const camelCaseData = convertToCamelCase(data);
+        console.log(camelCaseData, 'camelCaseData');
+        if (camelCaseData.system) {
+          updateSystemInfo(camelCaseData.system);
+        }
+        if (camelCaseData.cpu) {
+          updateCPUInfo(camelCaseData.cpu);
+        }
+        if (camelCaseData.disk) {
+          updateDiskInfo(camelCaseData.disk);
+        }
+        updateTimestamp();
+      }
+
+      function updateSystemInfo(system) {
+        const systemInfoDiv = document.getElementById("system-info");
+        systemInfoDiv.innerHTML = `
+          <div><strong>Hostname:</strong> ${system.hostname}</div>
+          <div><strong>OS:</strong> ${system.operatingSystem}</div>
+          <div><strong>Platform:</strong> ${system.platform}</div>
+          <div><strong>Total Memory:</strong> ${system.totalMemory}</div>
+        `;
+      }
+
+      function updateCPUInfo(cpu) {
+        const cpuInfoDiv = document.getElementById("cpu-info");
+        cpuInfoDiv.innerHTML = `
+          <div><strong>Model:</strong> ${cpu.modelName}</div>
+          <div><strong>Cores:</strong> ${cpu.cores}</div>
+        `;
+
+        const cpuCoresDiv = document.getElementById("cpu-cores");
+        cpuCoresDiv.innerHTML = cpu.cores
+          .map(
+            (usage, index) => `
+          <div class="text-center">
+            <div class="font-semibold">Core ${index + 1}</div>
+            <div>${usage.toFixed(1)}%</div>
+          </div>
+        `
+          )
+          .join("");
+      }
+
+      function updateDiskInfo(disk) {
+        const diskInfoDiv = document.getElementById("disk-info");
+        diskInfoDiv.innerHTML = `
+          <div><strong>Total:</strong> ${formatBytes(disk.totalDiskSpace)}</div>
+          <div><strong>Used:</strong> ${formatBytes(disk.usedDiskSpace)}</div>
+          <div><strong>Free:</strong> ${formatBytes(disk.freeDiskSpace)}</div>
+        `;
+      }
+
+      function updateTimestamp() {
+        const timestampDiv = document.getElementById("timestamp");
+        timestampDiv.textContent = new Date().toLocaleString();
+      }
+
+      function formatBytes(bytes) {
+        const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
+        if (bytes === 0) return "0 Byte";
+        const i = parseInt(Math.floor(Math.log(bytes) / Math.log(1024)));
+        return Math.round(bytes / Math.pow(1024, i), 2) + " " + sizes[i];
+      }
     </script>
   </body>
 </html>

@@ -123,10 +123,8 @@ func (s *Server) Subscribe(ctx context.Context, w http.ResponseWriter, r *http.R
 	for {
 		select {
 		case <-wsCtx.Done():
-			fmt.Println("wsCtx.Done()")
 			return wsCtx.Err()
 		case msg := <-sub.messages:
-			fmt.Println(string(msg))
 			err := ws.Write(wsCtx, websocket.MessageText, msg)
 			if err != nil {
 				return err
